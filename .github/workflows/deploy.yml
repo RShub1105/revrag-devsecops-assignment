@@ -1,0 +1,43 @@
+name: Secure Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+
+      - name: Build Docker image
+        run: docker build -t myapp:${{ github.sha }} .
+
+      # 🔍 Trivy scan (Task 3)
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: myapp:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL'
+          output: 'trivy-report.txt'
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-report
+          path: trivy-report.txt
+
+      - name: Push image
+        run: docker push myapp:${{ github.sha }}
+
+      - name: Deploy
+        run: |
+          ssh deploy@${{ secrets.SERVER_IP }} \
+          "docker pull myapp:${{ github.sha }} && docker run -d -p 80:3000 myapp:${{ github.sha }}"
