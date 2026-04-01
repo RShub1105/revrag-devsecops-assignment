@@ -18,17 +18,18 @@ jobs:
       - name: Build Docker image
         run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }} .
 
+      # 🔍 Trivy Scan (FIXED)
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
           severity: 'CRITICAL'
           ignore-unfixed: 'true'
           output: 'trivy-report.txt'
 
-      - name: Upload scan report
+      - name: Upload Trivy report
         uses: actions/upload-artifact@v4
         with:
           name: trivy-report
@@ -37,7 +38,10 @@ jobs:
       - name: Push image
         run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
 
-      - name: Deploy
+      - name: Deploy to server
         run: |
           ssh deploy@${{ secrets.SERVER_IP }} \
-          "docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }} && docker run -d -p 80:3000 ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}"
+          "docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }} && \
+           docker stop myapp || true && \
+           docker rm myapp || true && \
+           docker run -d --name myapp -p 80:3000 ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}"
